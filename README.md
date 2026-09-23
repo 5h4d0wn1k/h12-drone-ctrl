@@ -3,136 +3,93 @@
 > or hold explicit written authorization to assess**. Unauthorized use is
 > prohibited and may be illegal. Read [ETHICS.md](ETHICS.md) and
 > [SCOPE.md](SCOPE.md) before use. Use at your own risk; **AS IS**, no warranty.
+
 # H12 — Drone Controller
 
-MAVLink protocol handling, RC receiver emulation, and drone detection for ESP32.
+**Drone control protocol security toolkit** by **5h4d0wn1k** for **RF and
+telemetry research on hardware you own**: MAVLink v1/v2 heartbeat and RC
+channel framing, RC receiver emulation with PWM channel control, and ESP-NOW /
+Bayang drone detection on an ESP32 — with a simulation-only host helper and
+MAVLink fixtures for offline study. Never targets any aircraft, pilot or
+radio you don't own and directly control.
 
-## Overview
+## Why study drone telemetry
 
-Multi-protocol drone communication tool:
-- MAVLink v1/v2 heartbeat and RC channel transmission
-- ESP-NOW drone detection and protocol identification
-- RC receiver emulation with PWM channel control
-- Serial command interface for arming/disarm/throttle
-- Automatic drone discovery via ESP-NOW sniffing
-
-## Hardware
-
-| Component | Connection | Role |
-|-----------|------------|------|
-| ESP32 DevKit | Main board | MAVLink + ESP-NOW |
-| Flight controller | GPIO17(TX)/GPIO16(RX) | MAVLink serial |
-| Antenna | On-board PCB | 2.4 GHz reception |
+Consumer drone control links commonly ride 2.4 GHz ISM (ESP-NOW, FHSS) with
+MAVLink telemetry on serial or 433/868/915 MHz — and the same packets that
+carry arming commands carry replay and spoofing risk. This project teaches
+the protocol layer: how heartbeats (MAVLink msg 0) and RC channel frames
+(msg 35) are framed, CRC-16/MCRF4XX-validated, and parsed, and how
+ESP-NOW-inspired detection identifies drone radio signatures. Everything is
+bench-scoped: the ESP32 firmware drives MAVLink/RC over your own wiring, the
+host helper is simulation-only, and live RF proof stays inside a shielded,
+authorized lab. See [ETHICS.md](ETHICS.md) and [SCOPE.md](SCOPE.md).
 
 ## Features
 
-- **MAVLink protocol**: Heartbeat (Msg 0) and RC Channels (Msg 35) transmission
-- **ESP-NOW detection**: Identifies Bayang and ESP-NOW drone protocols
-- **RC emulation**: 8-channel PWM values with stick jitter simulation
-- **Drone tracking**: MAC-based deduplication with 5s timeout
-- **CRC-16/MCRF4XX**: MAVLink-compliant checksum calculation
+- **MAVLink framing** — heartbeat (msg 0) and RC Channels (msg 35) build/parse
+  with CRC-16/MCRF4XX checksum validation (`host/h12_cli.py`,
+  `firmware/h12_drone_ctrl/h12_drone_ctrl.ino`).
+- **RC receiver emulation** — 8 PWM channels (1000–2000 µs) at a 20 ms update
+  rate with stick-jitter simulation.
+- **ESP-NOW / Bayang detection** — drone protocol identification with MAC-based
+  deduplication and a 5-second timeout (`detectDrones`).
+- **Serial command interface** — throttle/arm handling with low-throttle arm
+  gating.
+- **Simulation-only host helper** — `python3 host/h12_cli.py --demo` validates
+  MAVLink frames offline and exits `0`; real arm/control is never triggered.
+- **Test fixtures** — offline MAVLink frame corpus in `fixtures/mavlink_frames.txt`.
 
-## Serial Output
+## Quickstart
 
-```
-=== H12 — Drone Controller ===
-MAVLink + ESP-NOW + RC emulation active
-
-[DRONE] New: AA:BB:CC:DD:EE:FF (proto=2)
-[ARMED] Throttle low — ready to arm
-[THROTTLE] 1150 µs
-```
-
-## Build & Flash
+### Firmware (ESP32)
 
 ```bash
-arduino-cli compile --fqbn esp32:esp32:esp32 firmware/
-arduino-cli upload --fqbn esp32:esp32:esp32 --port /dev/ttyUSB0 firmware/
+arduino-cli compile --fqbn esp32:esp32:esp32 firmware/h12_drone_ctrl
+arduino-cli upload --fqbn esp32:esp32:esp32 --port /dev/ttyUSB0 firmware/h12_drone_ctrl
 ```
 
-## Legal Disclaimer
+Bench wiring: ESP32 DevKit with the flight controller on GPIO17 (TX)/GPIO16
+(RX) for MAVLink serial, on-board PCB antenna for 2.4 GHz ESP-NOW.
 
-## IMPORTANT: Read before use.
+### Host helper (offline)
 
-This project is provided for **educational and authorized security testing purposes only**.
+```bash
+# Validate MAVLink framing, exit 0
+python3 host/h12_cli.py --demo
 
-### Authorization Requirements
-- You MUST have explicit written permission from the network owner before using this tool
-- Unauthorized interception of network communications is illegal under federal and state laws
-- This tool should ONLY be used on networks you own or have written authorization to test
+# Validate a hex MAVLink frame log
+python3 host/h12_cli.py --file fixtures/mavlink_frames.txt
 
-### Spectrum Regulatory Notes (ISM / RC bands)
-- RC and telemetry commonly use 2.4 GHz ISM (802.11 / ESP-NOW / FHSS)
-  and 5.8 GHz; MAVLink gaps may use 433/868/915 MHz ISM/SRD.
-- License-free operation must not cause harmful interference and must
-  respect local power/duty limits (FCC Part 15, ETSI EN 300 328,
-  ECC DEC(09)03); drones are additionally governed by aviation rules.
-- MAVLink/RC output must stay on your own bench wiring/RF harness.
+# Run the offline test suite
+python3 -m unittest discover -s tests
+```
 
-### No Third-Party Disruption
-Arm/disarm, heartbeat, or RC traffic aimed at any aircraft, pilot, or
-radio you don't own and directly control in an isolated lab is out of
-scope. Proofs here are MAVLink frames/fixtures and offline simulation
-only.
+## Project structure
 
-### Legal Framework
-- **Computer Fraud and Abuse Act (CFAA)**: Unauthorized access to computer systems is a federal crime
-- **Wiretap Act (18 U.S.C. § 2511)**: Interception of electronic communications without consent is illegal
-- **State Laws**: Many states have additional computer crime and wiretapping statutes
-- **GDPR/CCPA**: Data collection may be subject to privacy regulations
+```
+firmware/h12_drone_ctrl/h12_drone_ctrl.ino   # ESP32 firmware (MAVLink + ESP-NOW + RC)
+host/h12_cli.py                              # simulation-only MAVLink host helper
+host/hw_common.py                            # shared hardware helpers
+fixtures/mavlink_frames.txt                  # offline MAVLink frame corpus
+tests/                                       # unittest coverage
+```
 
-### Acceptable Use
-- Testing security of your own networks
-- Authorized penetration testing with written scope
-- Academic research in controlled lab environments
-- Security education and training
+## Documentation
 
-### Prohibited Use
-- Intercepting communications on networks you don't own
-- Attacking infrastructure without authorization
-- Any activity that violates applicable laws or regulations
-- Commercial use without proper licensing
+- [firmware README](firmware/README.md) — ESP32 build and bench details.
+- [ETHICS.md](ETHICS.md) — acceptable and prohibited use.
+- [SCOPE.md](SCOPE.md) — authorized target scope and shielded-lab rules.
+- [SECURITY.md](SECURITY.md) — responsible disclosure.
 
-### No Warranty
-This software is provided "AS IS" without warranty of any kind. The author is not responsible for any misuse or damage caused by this software.
+## Contributing
 
-### Responsible Disclosure
-If you discover vulnerabilities using this tool, follow responsible disclosure practices:
-1. Report to the vendor/owner privately
-2. Allow reasonable time for remediation
-3. Do not exploit beyond proof of concept
-
-## Live Lab Test Plan
-
-Run ONLY on an isolated, authorized own-lab bench against devices, networks,
-and spectrum **you own**. No third-party callers, bystanders, or spectrum users
-may be within range of any test transmission.
-
-1. **Isolate** - Put the DUT in a shielded/Faraday enclosure or a room with no
-   third-party devices in range. Use attenuators on any transmit path.
-2. **Own devices only** - Every target (AP, remote, tag, GPS module, drone FC,
-   receiver) must be your own hardware.
-3. **Lowest power, shortest duration** - Start at minimum TX power / duty cycle
-   and use only the seconds needed.
-4. **Record** - Save before/after logs to `reports/` (git-ignored). Never
-   capture or store third-party traffic.
-5. **Cleanup** - Restore placeholder SSIDs (`lab-*`), MACs (`00:11:22:33:44:55`),
-   example.com / RFC5737 addresses, and clear any captured data from the device.
-
-> Jammer / spoofer / replay projects are **proofs for study and simulation**
-> only. They refuse live interference scenarios: a live bench trigger requires
-> the `LAB_*` allowlist environment variable AND explicit `--yes` confirmation,
-> and even then only against your own hardware in a shielded bench.
-
-## Metrics
-
-| Metric | Target | Where |
-|---|---|---|
-| Firmware compile | `arduino-cli compile --fqbn esp32:esp32:esp32 firmware/h12_drone_ctrl` PASS | CI/local |
-| Host helper | `python3 host/h12_cli.py --demo` exits 0 (offline) | host/ |
-| Unit tests | `python3 -m unittest discover -s tests` passes | tests/ |
-| py_compile | every `host/*.py` compiles clean | CI/local |
+New MAVLink message types, detection heuristics and fixture frames are
+welcome. Open an issue or PR against the default branch; keep contributions
+scoped to bench and simulation tooling.
 
 ## License
 
-MIT
+MIT — full legal shield in [LICENSE](LICENSE). Educational, authorization-
+required software for studying drone telemetry on hardware you own in an
+isolated lab.
